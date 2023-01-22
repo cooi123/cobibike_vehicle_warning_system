@@ -42,6 +42,9 @@ const config = {
     resolve: {
         extensions: ['.tsx', '.ts', '.jsx', '.js', '...'],
     },
+    externals:{
+        cobi:'COBI'
+    }
 };
 
 module.exports = () => {
