@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "webpack --mode=production --node-env=production",
-    "server": "tsc -w | node server.js",
+    "server": "webpack build tsc | node server.js",
     "dev": "concurrently --kill-others-on-fail \"npm run build\" \"npm run server\"",
     "build:dev": "webpack --mode=development",
     "build:prod": "webpack --mode=production --node-env=production",
