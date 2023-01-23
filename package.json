@@ -4,7 +4,7 @@
   "description": "My webpack project",
   "main": "index.js",
   "scripts": {
-    "build": "webpack --mode=production --node-env=production tsc",
+    "build": "webpack --mode=production --node-env=production",
     "server": "webpack build tsc | node server.js",
     "dev": "concurrently --kill-others-on-fail \"npm run build\" \"npm run server\"",
     "build:dev": "webpack --mode=development",
