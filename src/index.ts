@@ -59,6 +59,7 @@ const distanceDOM = document.getElementById('distance')
 const routeDOM = document.getElementById('route')
 const coordDOM = document.getElementById('coordinate')
 const headingDOM = document.getElementById('heading')
+const vehicleDOM = document.getElementById('nearbyVehicle')
 
 
 let bikeId: string;
@@ -197,22 +198,31 @@ COBI.mobile.location.subscribe(({ coordinate, bearing }: COBIMobile) => {
     coordDOM ? coordDOM.innerText = `lat:${coordinate.latitude},lon:${coordinate.longitude}` : null
     headingDOM ? headingDOM.innerText = `${bearing}` : null
 })
-
 COBI.navigationService.distanceToDestination.subscribe((distance: number) => distanceDOM ? distanceDOM.innerText = `${distance.toFixed(2)} m` : null)
-const route = COBI.navigationService.route.subscribe((route: number) => routeDOM ? routeDOM.innerText = `${route}` : null)
+const route = COBI.navigationService.route.subscribe((route: any) => routeDOM ? routeDOM.innerText = `${route.origin.name}` : null)
 COBI.rideService.speed.subscribe((speed: number) => speedDOM ? speedDOM.innerText = `${speed.toFixed(2)} m/s` : null);
 // COBI.navigationService.control.route.subscribe(console.log)
 let nextPosMarker: mapboxgl.Marker;
 const movementDbRef = ref(db, "/bikeMovement")
 onValue(movementDbRef, (snapshot) => {
+
+
     const currentPos = bikeData[bikeData.length - 1]
 
     const allMovement = snapshot.val()
-    const data: currentPredict[] = Object.keys(allMovement).reduce((arr, key) => key != id ?
-        arr.concat({ ...allMovement[key], id: key }) : arr, [])
+    let currentBikePredictedPath: currentPredict;
+    const data: currentPredict[] = Object.keys(allMovement).reduce((arr, key) => {
+        if (key != id) {
+            return arr.concat({ ...allMovement[key], id: key })
+        } else {
+            currentBikePredictedPath = allMovement[key]
+            return arr
+        }
+    }, [])
     const currentTimeInUTCSecond = Date.now()
     const filterMovement: currentPredict[] = data.filter((val: any) => currentTimeInUTCSecond - val.time < 10 * 1000)
     console.log(filterMovement)
+    //only show vehicle within certain radius
     filterMovement.map(value => {
         const source: mapboxgl.GeoJSONSource = map.getSource(`${value.id}`) as mapboxgl.GeoJSONSource
         source ?
@@ -257,7 +267,16 @@ onValue(movementDbRef, (snapshot) => {
     })
 
 
-    //check collision for each of them dont need to check current 
+    //check collision for each of them
+    const dangerousVehicle = filterMovement.filter(val => intersects(currentBikePredictedPath.currentPos, currentBikePredictedPath.futurePos, val.currentPos, val.futurePos))
+    const position = dangerousVehicle.map(val => {
+        vehicleDOM ? vehicleDOM.innerText = `vehicle at ${getDirection(currentBikePredictedPath.currentPos, val.currentPos)}` : null
+        return {
+            direction: getDirection(currentBikePredictedPath.currentPos, val.currentPos),
+            'distance': distance(currentBikePredictedPath.currentPos, val.currentPos)
+        }
+    })
+    console.log(position)
     // filterMovement.map((val:[coordinateFromDB,co])=>{
     //     filterMovement.filter(p2=> intersects(val[0]['latitude'], val[0]['longitude'],val[1]['latitude'], val[1]['longitude'], p2[0]['latitude'], p2[0]['longitude'],p2[1]['latitude'], p2[1]['longitude']))
     // } )
@@ -287,19 +306,22 @@ const map = new mapboxgl.Map({
     zoom: 15 // starting zoom
 });
 
-function intersects(a: number, b: number, c: number, d: number, p: number, q: number, r: number, s: number) {
+function intersects(p1: coordinate, p2: coordinate, a1: coordinate, a2: coordinate) {
     //https://stackoverflow.com/questions/9043805/test-if-two-lines-intersect-javascript-function
+    const a = p1.latitude, b = p1.longitude, c = p2.latitude, d = p2.longitude, p = a1.latitude, q = a1.longitude, r = a2.latitude, s = a2.longitude
     var det, gamma, lambda;
     det = (c - a) * (s - q) - (r - p) * (d - b);
     if (det === 0) {
         //parrell or colinear check distance
-        return false;
+        return true;
     } else {
         lambda = ((s - q) * (r - a) + (p - r) * (s - b)) / det;
         gamma = ((b - d) * (r - a) + (c - a) * (s - b)) / det;
         return (0 < lambda && lambda < 1) && (0 < gamma && gamma < 1);
     }
 };
+
+console.log(`intersect ${intersects({ "latitude": 50.118746544727124, "longitude": 8.638783785656932 }, { "latitude": 50.118732786096054, "longitude": 8.638419005230906 }, { "latitude": 50.119001078688704, "longitude": 8.639025184468272 }, { "latitude": 50.118694949840226, "longitude": 8.639518710927012 })}`)
 
 function distance(p1: coordinate, p2: coordinate) {
     const lat1 = p1.latitude, lat2 = p2.latitude, lon1 = p1.longitude, lon2 = p2.longitude
@@ -320,9 +342,10 @@ console.log(distance({ latitude: 50.1189, longitude: 8.63913633995057 }, { latit
 
 function getDirection(currentPos: coordinate, otherVehiclePos: coordinate) {
     const lat1 = currentPos.latitude, ln1 = currentPos.longitude, lat2 = otherVehiclePos.latitude, ln2 = otherVehiclePos.longitude
-    const dLat = lat2 - lat1 * Math.PI / 180,
-        dLon = ln2 - ln1 * Math.PI / 180
-    const bearing = Math.atan2(dLon, dLat) * 180 / Math.PI
+    const dLat = lat2 - lat1,
+        dLon = ln2 - ln1
+
+    const bearing = Math.atan2(dLon, dLat) * (180 / Math.PI)
     var coordNames = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "N"];
     var coordIndex = Math.round(bearing / 45);
     if (coordIndex < 0) {
