@@ -32,6 +32,12 @@ interface coordinateFromDB extends coordinate {
     time: number
 }
 
+interface currentPredict {
+    currentPos: coordinate,
+    futurePos: coordinate,
+    time: number
+    id?: string
+}
 interface BikeData {
     bearing: number,
     postion: coordinate,
@@ -70,15 +76,14 @@ let bikeId: string;
 const bikeData: COBIMobile[] = []
 
 const valStream = COBI.mobile.location.subscribe((data: COBIMobile) => {
-    writeData(`/bike_data/${id}`, data)
+    // writeData(`/bike_data/${id}`, data)
     bikeData.push(data)
+    console.log(bikeData)
     const locationData = bikeData.map((x: any) => x['coordinate'])
     if (locationData.length > 2) {
-        const locationInLngLat = locationData.reduce((acc: string, current: coordinate, index) => acc + `${current.longitude},${current.latitude};`, '')
+        const locationInLngLat = locationData.slice(-2).reduce((acc: string, current: coordinate, index) => acc + `${current.longitude},${current.latitude};`, '')
 
         const predictPos = predictNextPos(bikeData[bikeData.length - 1] as COBIMobile)
-        console.log(predictPos)
-        console.log(locationData[bikeData.length - 1])
         if (nextPosMarker) {
             nextPosMarker.remove()
         }
@@ -87,38 +92,46 @@ const valStream = COBI.mobile.location.subscribe((data: COBIMobile) => {
         fetch('https://api.mapbox.com/matching/v5/mapbox/cycling/' +
             locationInLngLatWithPredicted +
             `?access_token=${MY_ACCESS_TOKEN}` +
-            '&geometries=geojson').then((response) => response.json()).then((data) => {
+            '&geometries=geojson').then((response) => {
+                if (!response.ok) {
+                    throw new Error("map matching")
+
+                }
+                return response.json()
+            }).then((data) => {
+                console.log(data)
                 const tracepoints = data["tracepoints"]
-                const matched_coordinates = tracepoints.map((x: any) => x["location"])
-                const nextMovement: coordinate[] = matched_coordinates.slice(-2).map((point: [number, number]) => ({ longtitude: point[0], latitude: point[1] }))
-                set(ref(db, "/bikeMovement/" + id), { ...nextMovement, 'time': serverTimestamp() })
-                const source: mapboxgl.GeoJSONSource = map.getSource('route') as mapboxgl.GeoJSONSource
-                source ?
-                    source.setData({
-                        'type': 'Feature',
-                        'properties': {},
-                        'geometry': {
-                            'type': 'LineString',
-                            'coordinates': matched_coordinates
+                const filterTracpoints = tracepoints.filter((x: any) => x ? true : false)
+                const matched_coordinates = filterTracpoints.map((x: any) => x["location"])
+                const nextMovement: coordinate[] = matched_coordinates.slice(-2).map((point: [number, number]) => ({ longitude: point[0], latitude: point[1] }))
+                set(ref(db, "/bikeMovement/" + id), { currentPos: nextMovement[0], futurePos: nextMovement[1], 'time': serverTimestamp() })
+                // const source: mapboxgl.GeoJSONSource = map.getSource('route') as mapboxgl.GeoJSONSource
+                // source ?
+                //     source.setData({
+                //         'type': 'Feature',
+                //         'properties': {},
+                //         'geometry': {
+                //             'type': 'LineString',
+                //             'coordinates': matched_coordinates
 
-                        }
-                    }) :
-                    map.addSource('route', {
-                        'type': 'geojson',
-                        'data': {
-                            'type': 'Feature',
-                            'properties': {},
-                            'geometry': {
-                                'type': 'LineString',
-                                'coordinates': matched_coordinates
+                //         }
+                //     }) :
+                //     map.addSource('route', {
+                //         'type': 'geojson',
+                //         'data': {
+                //             'type': 'Feature',
+                //             'properties': {},
+                //             'geometry': {
+                //                 'type': 'LineString',
+                //                 'coordinates': matched_coordinates
 
-                            }
-                        }
-                    })
+                //             }
+                //         }
+                //     })
 
                 map.panTo(matched_coordinates[matched_coordinates.length - 1])
-                console.log(matched_coordinates)
-                console.log(matched_coordinates.slice(0, -1))
+                // console.log(matched_coordinates)
+                // console.log(matched_coordinates.slice(0, -1))
                 const actualPathSource: mapboxgl.GeoJSONSource = map.getSource('actualRoute') as mapboxgl.GeoJSONSource
                 actualPathSource ?
                     actualPathSource.setData({
@@ -144,21 +157,21 @@ const valStream = COBI.mobile.location.subscribe((data: COBIMobile) => {
                     })
             })
 
-        if (!map.getLayer("route")) {
-            map.addLayer({
-                'id': 'route',
-                'type': 'line',
-                'source': 'route',
-                'layout': {
-                    'line-join': 'round',
-                    'line-cap': 'round'
-                },
-                'paint': {
-                    'line-color': '#FF5733',
-                    'line-width': 8
-                }
-            })
-        }
+        // if (!map.getLayer("route")) {
+        //     map.addLayer({
+        //         'id': 'route',
+        //         'type': 'line',
+        //         'source': 'route',
+        //         'layout': {
+        //             'line-join': 'round',
+        //             'line-cap': 'round'
+        //         },
+        //         'paint': {
+        //             'line-color': '#FF5733',
+        //             'line-width': 8
+        //         }
+        //     })
+        // }
         if (!map.getLayer('actualRoute')) {
             map.addLayer({
                 'id': 'actualRoute',
@@ -192,11 +205,62 @@ COBI.rideService.speed.subscribe((speed: number) => speedDOM ? speedDOM.innerTex
 let nextPosMarker: mapboxgl.Marker;
 const movementDbRef = ref(db, "/bikeMovement")
 onValue(movementDbRef, (snapshot) => {
-    const data = Object.values(snapshot.val())
+    const currentPos = bikeData[bikeData.length - 1]
+
+    const allMovement = snapshot.val()
+    const data: currentPredict[] = Object.keys(allMovement).reduce((arr, key) => key != id ?
+        arr.concat({ ...allMovement[key], id: key }) : arr, [])
     const currentTimeInUTCSecond = Date.now()
-    const filterMovement = data.filter((val: any) => currentTimeInUTCSecond - val.time < 10 * 1000)
+    const filterMovement: currentPredict[] = data.filter((val: any) => currentTimeInUTCSecond - val.time < 10 * 1000)
     console.log(filterMovement)
-    //check collision for each of them
+    filterMovement.map(value => {
+        const source: mapboxgl.GeoJSONSource = map.getSource(`${value.id}`) as mapboxgl.GeoJSONSource
+        source ?
+            source.setData({
+                'type': 'Feature',
+                'properties': {},
+                'geometry': {
+                    'type': 'LineString',
+                    'coordinates': [[value.currentPos.longitude, value.currentPos.latitude], [value.futurePos.longitude, value.futurePos.latitude]]
+
+                }
+            }) :
+            map.addSource(`${value.id}`, {
+                'type': 'geojson',
+                'data': {
+                    'type': 'Feature',
+                    'properties': {},
+                    'geometry': {
+                        'type': 'LineString',
+                        'coordinates': [[value.currentPos.longitude, value.currentPos.latitude], [value.futurePos.longitude, value.futurePos.latitude]]
+                    }
+                }
+            })
+
+
+        if (!map.getLayer(`${value.id}`)) {
+            map.addLayer({
+                'id': `${value.id}`,
+                'type': 'line',
+                'source': `${value.id}`,
+                'layout': {
+                    'line-join': 'round',
+                    'line-cap': 'round'
+                },
+                'paint': {
+                    'line-color': '#FF5733',
+                    'line-width': 8
+                }
+            })
+        }
+
+    })
+
+
+    //check collision for each of them dont need to check current 
+    // filterMovement.map((val:[coordinateFromDB,co])=>{
+    //     filterMovement.filter(p2=> intersects(val[0]['latitude'], val[0]['longitude'],val[1]['latitude'], val[1]['longitude'], p2[0]['latitude'], p2[0]['longitude'],p2[1]['latitude'], p2[1]['longitude']))
+    // } )
 
 })
 
@@ -253,3 +317,17 @@ function distance(p1: coordinate, p2: coordinate) {
     return R * c; // in metres
 }
 console.log(distance({ latitude: 50.1189, longitude: 8.63913633995057 }, { latitude: 50.118436033, longitude: 8.64002683 }))
+
+function getDirection(currentPos: coordinate, otherVehiclePos: coordinate) {
+    const lat1 = currentPos.latitude, ln1 = currentPos.longitude, lat2 = otherVehiclePos.latitude, ln2 = otherVehiclePos.longitude
+    const dLat = lat2 - lat1 * Math.PI / 180,
+        dLon = ln2 - ln1 * Math.PI / 180
+    const bearing = Math.atan2(dLon, dLat) * 180 / Math.PI
+    var coordNames = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "N"];
+    var coordIndex = Math.round(bearing / 45);
+    if (coordIndex < 0) {
+        coordIndex = coordIndex + 8
+    };
+    return coordNames[coordIndex]
+}
+console.log(getDirection({ "latitude": 50.118869362113756, "longitude": 8.639162559524522 }, { latitude: 50.119379, longitude: 8.63838 }))
