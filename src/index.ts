@@ -82,7 +82,7 @@ const valStream = COBI.mobile.location.subscribe((data: COBIMobile) => {
     console.log(bikeData)
     const locationData = bikeData.map((x: any) => x['coordinate'])
     if (locationData.length > 2) {
-        const locationInLngLat = locationData.slice(-2).reduce((acc: string, current: coordinate, index) => acc + `${current.longitude},${current.latitude};`, '')
+        const locationInLngLat = locationData.reduce((acc: string, current: coordinate, index) => acc + `${current.longitude},${current.latitude};`, '')
 
         const predictPos = predictNextPos(bikeData[bikeData.length - 1] as COBIMobile)
         if (nextPosMarker) {
