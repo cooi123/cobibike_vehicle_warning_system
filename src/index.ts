@@ -23,6 +23,29 @@ function writeData(path: string, data: any) {
     push(ref(db, path), { ...data, 'time': serverTimestamp() })
 }
 
+mapboxgl.accessToken = "pk.eyJ1IjoiY2FsZWJvb2kiLCJhIjoiY2tvNTVrNnMzMG9tYjJwcncyY2JsamM1NyJ9.aoY9sduHWrxydrrwgC_6iA"
+const map = new mapboxgl.Map({
+    container: 'map', // container ID
+    style: 'mapbox://styles/mapbox/streets-v12', // style URL
+    center: [145.1321705849278, -37.907477131394], // starting position [lng, lat]
+    zoom: 15 // starting zoom
+});
+
+map.addControl(new mapboxgl.GeolocateControl({
+    positionOptions: {
+        enableHighAccuracy: true
+    },
+    // When active the map will receive updates to the device's location as it changes.
+    trackUserLocation: true,
+    // Draw an arrow next to the location dot to indicate which direction the device is heading.
+    showUserHeading: true
+}))
+
+const nav = new mapboxgl.NavigationControl({
+    visualizePitch: true,
+    showCompass: true
+});
+map.addControl(nav, 'bottom-right');
 
 interface coordinate {
     latitude: number,
@@ -264,6 +287,9 @@ onValue(movementDbRef, (snapshot) => {
             })
         }
 
+        // map.panTo([value.currentPos.longitude, value.currentPos.latitude])
+
+
     })
 
 
@@ -298,13 +324,7 @@ function predictNextPos({ coordinate, bearing, speed }: COBIMobile): coordinate 
 }
 
 
-mapboxgl.accessToken = "pk.eyJ1IjoiY2FsZWJvb2kiLCJhIjoiY2tvNTVrNnMzMG9tYjJwcncyY2JsamM1NyJ9.aoY9sduHWrxydrrwgC_6iA"
-const map = new mapboxgl.Map({
-    container: 'map', // container ID
-    style: 'mapbox://styles/mapbox/streets-v12', // style URL
-    center: [-122.483696, 37.833818], // starting position [lng, lat]
-    zoom: 15 // starting zoom
-});
+
 
 function intersects(p1: coordinate, p2: coordinate, a1: coordinate, a2: coordinate) {
     //https://stackoverflow.com/questions/9043805/test-if-two-lines-intersect-javascript-function
