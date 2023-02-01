@@ -3,7 +3,7 @@ COBI.init('token');
 import { response } from 'express';
 import { initializeApp } from 'firebase/app';
 import { getDatabase, push, set, ref, serverTimestamp, onValue, DataSnapshot, get, update } from "firebase/database";
-import mapboxgl from 'mapbox-gl';
+import mapboxgl, { Marker } from 'mapbox-gl';
 const mapboxMapMatching = require('@mapbox/mapbox-sdk/services/styles')
 const MY_ACCESS_TOKEN = "pk.eyJ1IjoiY2FsZWJvb2kiLCJhIjoiY2tvNTVrNnMzMG9tYjJwcncyY2JsamM1NyJ9.aoY9sduHWrxydrrwgC_6iA"
 const mapMatching = mapboxMapMatching({ accessToken: MY_ACCESS_TOKEN })
@@ -28,7 +28,8 @@ const map = new mapboxgl.Map({
     container: 'map', // container ID
     style: 'mapbox://styles/mapbox/streets-v12', // style URL
     center: [145.1321705849278, -37.907477131394], // starting position [lng, lat]
-    zoom: 15 // starting zoom
+    zoom: 15, // starting zoom
+    pitch: 60
 });
 
 map.addControl(new mapboxgl.GeolocateControl({
@@ -58,8 +59,9 @@ interface coordinateFromDB extends coordinate {
 interface currentPredict {
     currentPos: coordinate,
     futurePos: coordinate,
-    time: number
-    id?: string
+    time: number | object
+    id?: string,
+    bearing: number
 }
 interface BikeData {
     bearing: number,
@@ -77,30 +79,31 @@ interface COBIMobile {
     verticalAccuracy: number
 
 }
-const speedDOM = document.getElementById('speed')
-const distanceDOM = document.getElementById('distance')
-const routeDOM = document.getElementById('route')
-const coordDOM = document.getElementById('coordinate')
-const headingDOM = document.getElementById('heading')
 const vehicleDOM = document.getElementById('nearbyVehicle')
 
-
-let bikeId: string;
-
-// const bikeNo= get(ref(db,'/bikeNumber')).then((datasnapshot=>{
-//     if(datasnapshot.exists()){
-//         bikeId =datasnapshot.val()
-//         update(ref(db), {number: parseInt(bikeId) + 1})
-//     }else{
-//         push(ref(db,'/bikeNumber'),'1')
-//     }
-// console.log(bikeId)
-
-//     }))
 const bikeData: COBIMobile[] = []
 
+const dotElem = document.createElement('div')
+dotElem.className = 'mapboxgl-user-location-dot'
+dotElem.classList.add('mapboxgl-user-location-show-heading')
+const headingElem = document.createElement('div')
+headingElem.className = 'mapboxgl-user-location-heading'
+dotElem.appendChild(headingElem)
+const userLocationDotMarker = new mapboxgl.Marker({
+    element: dotElem, rotationAlignment: 'map'
+});
 const valStream = COBI.mobile.location.subscribe((data: COBIMobile) => {
     // writeData(`/bike_data/${id}`, data)
+    const currentLngLat: mapboxgl.LngLatLike = [data.coordinate.longitude, data.coordinate.latitude]
+    map.easeTo({
+        center: currentLngLat,
+        bearing: Math.round(data.bearing), easing: x => x
+    })
+    userLocationDotMarker.setLngLat(currentLngLat).addTo(map)
+    userLocationDotMarker.setRotation(data.bearing)
+    // map.rotateTo(data.bearing, { duration: 2000 })
+
+    vehicleDOM ? vehicleDOM.innerText = `${map.getBearing() - data.bearing}` : null
     bikeData.push(data)
     console.log(bikeData)
     const locationData = bikeData.map((x: any) => x['coordinate'])
@@ -111,7 +114,7 @@ const valStream = COBI.mobile.location.subscribe((data: COBIMobile) => {
         if (nextPosMarker) {
             nextPosMarker.remove()
         }
-        nextPosMarker = new mapboxgl.Marker().setLngLat([predictPos['longitude'], predictPos['latitude']]).addTo(map)
+        // nextPosMarker = new mapboxgl.Marker().setLngLat([predictPos['longitude'], predictPos['latitude']]).addTo(map)
         const locationInLngLatWithPredicted = locationInLngLat + `${predictPos.longitude},${predictPos.latitude}`
         fetch('https://api.mapbox.com/matching/v5/mapbox/cycling/' +
             locationInLngLatWithPredicted +
@@ -122,111 +125,24 @@ const valStream = COBI.mobile.location.subscribe((data: COBIMobile) => {
 
                 }
                 return response.json()
-            }).then((data) => {
+            }).then((mapMatchingData) => {
                 console.log(data)
-                const tracepoints = data["tracepoints"]
+                const tracepoints = mapMatchingData["tracepoints"]
                 const filterTracpoints = tracepoints.filter((x: any) => x ? true : false)
                 const matched_coordinates = filterTracpoints.map((x: any) => x["location"])
                 const nextMovement: coordinate[] = matched_coordinates.slice(-2).map((point: [number, number]) => ({ longitude: point[0], latitude: point[1] }))
-                set(ref(db, "/bikeMovement/" + id), { currentPos: nextMovement[0], futurePos: nextMovement[1], 'time': serverTimestamp() })
-                // const source: mapboxgl.GeoJSONSource = map.getSource('route') as mapboxgl.GeoJSONSource
-                // source ?
-                //     source.setData({
-                //         'type': 'Feature',
-                //         'properties': {},
-                //         'geometry': {
-                //             'type': 'LineString',
-                //             'coordinates': matched_coordinates
-
-                //         }
-                //     }) :
-                //     map.addSource('route', {
-                //         'type': 'geojson',
-                //         'data': {
-                //             'type': 'Feature',
-                //             'properties': {},
-                //             'geometry': {
-                //                 'type': 'LineString',
-                //                 'coordinates': matched_coordinates
-
-                //             }
-                //         }
-                //     })
-
-                map.panTo(matched_coordinates[matched_coordinates.length - 1])
-                // console.log(matched_coordinates)
-                // console.log(matched_coordinates.slice(0, -1))
-                const actualPathSource: mapboxgl.GeoJSONSource = map.getSource('actualRoute') as mapboxgl.GeoJSONSource
-                actualPathSource ?
-                    actualPathSource.setData({
-                        'type': 'Feature',
-                        'properties': {},
-                        'geometry': {
-                            'type': 'LineString',
-                            'coordinates': matched_coordinates.slice(0, -1)
-
-                        }
-                    }) :
-                    map.addSource('actualRoute', {
-                        'type': 'geojson',
-                        'data': {
-                            'type': 'Feature',
-                            'properties': {},
-                            'geometry': {
-                                'type': 'LineString',
-                                'coordinates': matched_coordinates.slice(0, -1)
-
-                            }
-                        }
-                    })
+                const path: currentPredict = { currentPos: nextMovement[0], futurePos: nextMovement[1], time: serverTimestamp(), bearing: data.bearing }
+                console.log(path)
+                set(ref(db, "/bikeMovement/" + id), path)
             })
-
-        // if (!map.getLayer("route")) {
-        //     map.addLayer({
-        //         'id': 'route',
-        //         'type': 'line',
-        //         'source': 'route',
-        //         'layout': {
-        //             'line-join': 'round',
-        //             'line-cap': 'round'
-        //         },
-        //         'paint': {
-        //             'line-color': '#FF5733',
-        //             'line-width': 8
-        //         }
-        //     })
-        // }
-        if (!map.getLayer('actualRoute')) {
-            map.addLayer({
-                'id': 'actualRoute',
-                'type': 'line',
-                'source': 'actualRoute',
-                'layout': {
-                    'line-join': 'round',
-                    'line-cap': 'round'
-                },
-                'paint': {
-                    'line-color': '#00f',
-                    'line-width': 5
-                }
-            })
-        }
-
     }
 
 })
 
-
-COBI.mobile.location.subscribe(({ coordinate, bearing }: COBIMobile) => {
-    coordDOM ? coordDOM.innerText = `lat:${coordinate.latitude},lon:${coordinate.longitude}` : null
-    headingDOM ? headingDOM.innerText = `${bearing}` : null
-})
-COBI.navigationService.distanceToDestination.subscribe((distance: number) => distanceDOM ? distanceDOM.innerText = `${distance.toFixed(2)} m` : null)
-const route = COBI.navigationService.route.subscribe((route: any) => routeDOM ? routeDOM.innerText = `${route.origin.name}` : null)
-COBI.rideService.speed.subscribe((speed: number) => speedDOM ? speedDOM.innerText = `${speed.toFixed(2)} m/s` : null);
 // COBI.navigationService.control.route.subscribe(console.log)
 let nextPosMarker: mapboxgl.Marker;
 const movementDbRef = ref(db, "/bikeMovement")
+let otherVehicleMarkers: Marker[] = [];
 onValue(movementDbRef, (snapshot) => {
 
 
@@ -246,50 +162,18 @@ onValue(movementDbRef, (snapshot) => {
     const filterMovement: currentPredict[] = data.filter((val: any) => currentTimeInUTCSecond - val.time < 10 * 1000)
     console.log(filterMovement)
     //only show vehicle within certain radius
-    filterMovement.map(value => {
-        const source: mapboxgl.GeoJSONSource = map.getSource(`${value.id}`) as mapboxgl.GeoJSONSource
-        source ?
-            source.setData({
-                'type': 'Feature',
-                'properties': {},
-                'geometry': {
-                    'type': 'LineString',
-                    'coordinates': [[value.currentPos.longitude, value.currentPos.latitude], [value.futurePos.longitude, value.futurePos.latitude]]
-
-                }
-            }) :
-            map.addSource(`${value.id}`, {
-                'type': 'geojson',
-                'data': {
-                    'type': 'Feature',
-                    'properties': {},
-                    'geometry': {
-                        'type': 'LineString',
-                        'coordinates': [[value.currentPos.longitude, value.currentPos.latitude], [value.futurePos.longitude, value.futurePos.latitude]]
-                    }
-                }
-            })
-
-
-        if (!map.getLayer(`${value.id}`)) {
-            map.addLayer({
-                'id': `${value.id}`,
-                'type': 'line',
-                'source': `${value.id}`,
-                'layout': {
-                    'line-join': 'round',
-                    'line-cap': 'round'
-                },
-                'paint': {
-                    'line-color': '#FF5733',
-                    'line-width': 8
-                }
-            })
-        }
-
-        // map.panTo([value.currentPos.longitude, value.currentPos.latitude])
-
-
+    otherVehicleMarkers.forEach(x => x.remove())
+    otherVehicleMarkers = filterMovement.map(value => {
+        const dotElem = document.createElement('div')
+        dotElem.className = 'mapboxgl-user-location-dot'
+        dotElem.classList.add('mapboxgl-user-location-show-heading')
+        const headingElem = document.createElement('div')
+        headingElem.className = 'mapboxgl-user-location-heading'
+        dotElem.appendChild(headingElem)
+        const currentLngLat: mapboxgl.LngLatLike = [value.currentPos.longitude, value.currentPos.latitude]
+        const otherVehicleMarker = new mapboxgl.Marker(dotElem).setLngLat(currentLngLat).addTo(map)
+        otherVehicleMarker.setRotation(value.bearing)
+        return otherVehicleMarker
     })
 
 
