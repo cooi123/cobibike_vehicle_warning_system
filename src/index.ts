@@ -1,4 +1,6 @@
+import "./style.css"
 declare var COBI: any
+
 COBI.init('token');
 import { response } from 'express';
 import { initializeApp } from 'firebase/app';
@@ -103,7 +105,6 @@ const valStream = COBI.mobile.location.subscribe((data: COBIMobile) => {
     userLocationDotMarker.setRotation(data.bearing)
     // map.rotateTo(data.bearing, { duration: 2000 })
 
-    vehicleDOM ? vehicleDOM.innerText = `${map.getBearing() - data.bearing}` : null
     bikeData.push(data)
     console.log(bikeData)
     const locationData = bikeData.map((x: any) => x['coordinate'])
@@ -126,12 +127,13 @@ const valStream = COBI.mobile.location.subscribe((data: COBIMobile) => {
                 }
                 return response.json()
             }).then((mapMatchingData) => {
-                console.log(data)
+                console.log(data.bearing)
                 const tracepoints = mapMatchingData["tracepoints"]
                 const filterTracpoints = tracepoints.filter((x: any) => x ? true : false)
                 const matched_coordinates = filterTracpoints.map((x: any) => x["location"])
                 const nextMovement: coordinate[] = matched_coordinates.slice(-2).map((point: [number, number]) => ({ longitude: point[0], latitude: point[1] }))
                 const path: currentPredict = { currentPos: nextMovement[0], futurePos: nextMovement[1], time: serverTimestamp(), bearing: data.bearing }
+
                 console.log(path)
                 set(ref(db, "/bikeMovement/" + id), path)
             })
@@ -162,17 +164,25 @@ onValue(movementDbRef, (snapshot) => {
     const filterMovement: currentPredict[] = data.filter((val: any) => currentTimeInUTCSecond - val.time < 10 * 1000)
     console.log(filterMovement)
     //only show vehicle within certain radius
+
     otherVehicleMarkers.forEach(x => x.remove())
     otherVehicleMarkers = filterMovement.map(value => {
         const dotElem = document.createElement('div')
-        dotElem.className = 'mapboxgl-user-location-dot'
+        dotElem.className = 'mymapboxgl-user-location-dot'
         dotElem.classList.add('mapboxgl-user-location-show-heading')
+        // dotElem.style.transform = 'scale("10")'
+        // dotElem.style.backgroundColor = 'yellow'
+        // dotElem.style.width = '27px'
+        // dotElem.style.height = '41px'
+
         const headingElem = document.createElement('div')
+        // const dot: HTMLElement | null = document.querySelector('.mapboxgl-user-location-dot')
+        // dot ? dot.style.backgroundColor = '#eed202' : null
         headingElem.className = 'mapboxgl-user-location-heading'
         dotElem.appendChild(headingElem)
         const currentLngLat: mapboxgl.LngLatLike = [value.currentPos.longitude, value.currentPos.latitude]
         const otherVehicleMarker = new mapboxgl.Marker(dotElem).setLngLat(currentLngLat).addTo(map)
-        otherVehicleMarker.setRotation(value.bearing)
+        currentBikePredictedPath ? otherVehicleMarker.setRotation(value.bearing - currentBikePredictedPath.bearing) : otherVehicleMarker.setRotation(value.bearing)
         return otherVehicleMarker
     })
 
@@ -180,13 +190,13 @@ onValue(movementDbRef, (snapshot) => {
     //check collision for each of them
     const dangerousVehicle = filterMovement.filter(val => intersects(currentBikePredictedPath.currentPos, currentBikePredictedPath.futurePos, val.currentPos, val.futurePos))
     const position = dangerousVehicle.map(val => {
-        vehicleDOM ? vehicleDOM.innerText = `vehicle at ${getDirection(currentBikePredictedPath.currentPos, val.currentPos)}` : null
+        vehicleDOM ? vehicleDOM.innerText = `vehicle at ${getDirection(currentBikePredictedPath, val.currentPos)}` : null
         return {
-            direction: getDirection(currentBikePredictedPath.currentPos, val.currentPos),
+            direction: getDirection(currentBikePredictedPath, val.currentPos),
             'distance': distance(currentBikePredictedPath.currentPos, val.currentPos)
         }
     })
-    console.log(position)
+    // console.log(position)
     // filterMovement.map((val:[coordinateFromDB,co])=>{
     //     filterMovement.filter(p2=> intersects(val[0]['latitude'], val[0]['longitude'],val[1]['latitude'], val[1]['longitude'], p2[0]['latitude'], p2[0]['longitude'],p2[1]['latitude'], p2[1]['longitude']))
     // } )
@@ -244,17 +254,19 @@ function distance(p1: coordinate, p2: coordinate) {
 }
 console.log(distance({ latitude: 50.1189, longitude: 8.63913633995057 }, { latitude: 50.118436033, longitude: 8.64002683 }))
 
-function getDirection(currentPos: coordinate, otherVehiclePos: coordinate) {
-    const lat1 = currentPos.latitude, ln1 = currentPos.longitude, lat2 = otherVehiclePos.latitude, ln2 = otherVehiclePos.longitude
+function getDirection(currentPos: currentPredict, otherVehiclePos: coordinate) {
+    const lat1 = currentPos.currentPos.latitude, ln1 = currentPos.currentPos.longitude, lat2 = otherVehiclePos.latitude, ln2 = otherVehiclePos.longitude
     const dLat = lat2 - lat1,
         dLon = ln2 - ln1
 
     const bearing = Math.atan2(dLon, dLat) * (180 / Math.PI)
+
     var coordNames = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "N"];
-    var coordIndex = Math.round(bearing / 45);
+    var coordIndex = Math.round(currentPos.bearing - bearing / 45);
+
     if (coordIndex < 0) {
         coordIndex = coordIndex + 8
     };
     return coordNames[coordIndex]
 }
-console.log(getDirection({ "latitude": 50.118869362113756, "longitude": 8.639162559524522 }, { latitude: 50.119379, longitude: 8.63838 }))
+// console.log(getDirection({ "latitude": 50.118869362113756, "longitude": 8.639162559524522 }, { latitude: 50.119379, longitude: 8.63838 }))
