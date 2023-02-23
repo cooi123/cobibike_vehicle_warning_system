@@ -4,6 +4,7 @@ const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 const isProduction = process.env.NODE_ENV == 'production';
+const Dotenv = require('dotenv-webpack');
 
 const config = {
     entry: ['./src/index.ts','./src/style.css'],
@@ -17,7 +18,7 @@ const config = {
     plugins: [
         new HtmlWebpackPlugin({
             template: 'index.html',
-        }),
+        }),new Dotenv(),
 
         // Add your plugins here
         // Learn more about plugins from https://webpack.js.org/configuration/plugins/

@@ -1,56 +1,35 @@
 <!DOCTYPE html>
 <html>
+  <head>
+    <meta charset="utf-8" />
+    <title>COBI.Bike template page</title>
 
-<head>
-  <meta charset="utf-8">
-  <title>COBI.Bike template page</title>
+    <!-- Sets initial viewport load and disables zooming  -->
+    <meta name="viewport" content="initial-scale=1, maximum-scale=1" />
 
-  <!-- Sets initial viewport load and disables zooming  -->
-  <meta name="viewport" content="initial-scale=1, maximum-scale=1">
+    <!-- Makes your prototype chrome-less once bookmarked to your phone's home screen -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
 
-  <!-- Makes your prototype chrome-less once bookmarked to your phone's home screen -->
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <!-- Include the compiled COBI.Bike CSS -->
+    <link
+      href="https://cdn.cobi.bike/devkit/v1.0.0/css/cobi-style.css"
+      rel="stylesheet"
+    />
 
-  <!-- Include the compiled COBI.Bike CSS -->
-  <link href="https://cdn.cobi.bike/devkit/v1.0.0/css/cobi-style.css" rel="stylesheet">
+    <!-- Include the compiled COBI.Bike JS -->
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-beta.28/js/uikit.min.js"></script> -->
+    <script src="https://cdn.cobi.bike/cobi.js/0.44.0/cobi.js"></script>
+    <!-- map box map  -->
+    <link
+      href="https://api.mapbox.com/mapbox-gl-js/v2.8.1/mapbox-gl.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <script src="test.js"></script>
+  </head>
 
-  <!-- Include the compiled COBI.Bike JS -->
-  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-beta.28/js/uikit.min.js"></script> -->
-  <script src="https://cdn.cobi.bike/cobi.js/0.44.0/cobi.js"></script>
-  <!-- map box map  -->
-  <link href='https://api.mapbox.com/mapbox-gl-js/v2.8.1/mapbox-gl.css' rel='stylesheet' />
-  <link rel="stylesheet" href="style.css"> 
-<script src='test.js'></script>
-</head>
-
-<body>
-
-    <div class="content">
-      <!-- content of your page go here -->
-      <!-- <div id='map' style='width: 400px; height: 300px;'></div>
-      <input
-      name="address" placeholder="Address" type="text"
-    autocomplete="address-line1"/>
-  
-    </div> -->
-    <!-- <div class="hit-indicator">HIT</div> -->
-
-    <div id='map' style='width: 100%; height: 90vh; ' ></div>
-<!-- <div class="hit-indicator">HIT</div> -->
-
-    <h3 style="text-align:center">Nearby Vehicle</h3>
-    <h3 style="text-align:center" id = 'nearbyVehicle'></h3>
-<!-- <div class="container">
-      <div class="left-side hit-indicator">LEFT</div>
-      <div class="right-side hit-indicator">RIGHT</div>
-      <div class="top-side hit">TOP</div>
-      <div class="bottom-side">BOTTOM</div>
-      <div class="center-div">
-        <p>This div is centered both horizontally and vertically.</p>
-      </div>
-    </div> -->
-
-</body>
-
+  <body>
+    <div id="map" style="width: 100%; height: 90vh" class="flashing-div"></div>
+  </body>
 </html>

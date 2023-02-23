@@ -1,18 +1,19 @@
 import "./style.css"
+console.log(process.env["MAP_BOX_API"])
 declare var COBI: any
-
+//Cobibike library
 COBI.init('token');
-import { response } from 'express';
 import { initializeApp } from 'firebase/app';
 import { getDatabase, push, set, ref, serverTimestamp, onValue, DataSnapshot, get, update } from "firebase/database";
 import mapboxgl, { Marker } from 'mapbox-gl';
-const mapboxMapMatching = require('@mapbox/mapbox-sdk/services/styles')
-const MY_ACCESS_TOKEN = "pk.eyJ1IjoiY2FsZWJvb2kiLCJhIjoiY2tvNTVrNnMzMG9tYjJwcncyY2JsamM1NyJ9.aoY9sduHWrxydrrwgC_6iA"
-const mapMatching = mapboxMapMatching({ accessToken: MY_ACCESS_TOKEN })
+
+const MY_ACCESS_TOKEN = process.env["MAP_BOX_API"] || "undefine"
+const DATABASE_URL = process.env["DATABASE_URL"]
+console.log(DATABASE_URL)
 const firebaseConfig = {
     //...
 
-    databaseURL: 'https://cobibikeapp-default-rtdb.asia-southeast1.firebasedatabase.app/'
+    databaseURL: DATABASE_URL
 };
 
 const app = initializeApp(firebaseConfig);
@@ -25,7 +26,7 @@ function writeData(path: string, data: any) {
     push(ref(db, path), { ...data, 'time': serverTimestamp() })
 }
 
-mapboxgl.accessToken = "pk.eyJ1IjoiY2FsZWJvb2kiLCJhIjoiY2tvNTVrNnMzMG9tYjJwcncyY2JsamM1NyJ9.aoY9sduHWrxydrrwgC_6iA"
+mapboxgl.accessToken = MY_ACCESS_TOKEN
 const map = new mapboxgl.Map({
     container: 'map', // container ID
     style: 'mapbox://styles/mapbox/streets-v12', // style URL
@@ -54,9 +55,7 @@ interface coordinate {
     latitude: number,
     longitude: number
 }
-interface coordinateFromDB extends coordinate {
-    time: number
-}
+
 
 interface currentPredict {
     currentPos: coordinate,
@@ -94,6 +93,7 @@ dotElem.appendChild(headingElem)
 const userLocationDotMarker = new mapboxgl.Marker({
     element: dotElem, rotationAlignment: 'map'
 });
+
 const valStream = COBI.mobile.location.subscribe((data: COBIMobile) => {
     // writeData(`/bike_data/${id}`, data)
     const currentLngLat: mapboxgl.LngLatLike = [data.coordinate.longitude, data.coordinate.latitude]
@@ -141,10 +141,57 @@ const valStream = COBI.mobile.location.subscribe((data: COBIMobile) => {
 
 })
 
-// COBI.navigationService.control.route.subscribe(console.log)
 let nextPosMarker: mapboxgl.Marker;
 const movementDbRef = ref(db, "/bikeMovement")
 let otherVehicleMarkers: Marker[] = [];
+
+
+function flashWarning(bearing: number) {
+
+    const mapDiv = document.querySelector('.flashing-div')
+    const style = document.createElement('style');
+
+
+    if (bearing > 0 && bearing < 90) {
+        style.innerHTML = `
+        .flashing {
+          border-top-style: solid;
+          animation: flashing-top 1s ease-in-out infinite;
+        }
+      `;
+    } else if (bearing > 90 && bearing < 180) {
+        style.innerHTML = `
+        .flashing {
+          border-right-style: solid;
+          animation: flashing-right 1s ease-in-out infinite;
+        }
+      `;
+    } else if (bearing > 180 && bearing < 270) {
+        style.innerHTML = `
+        .flashing {
+          border-bottom-style: solid;
+          animation: flashing-bottom 1s ease-in-out infinite;
+        }
+      `;
+    } else if (bearing > 270 && bearing < 360) {
+        style.innerHTML = `
+        .flashing {
+          border-left-style: solid;
+          animation: flashing-left 1s ease-in-out infinite;
+        }
+      `;
+    }
+
+    document.head.appendChild(style);
+
+    // Add the "flashing" class to start the animation
+    mapDiv?.classList.add('flashing');
+
+    // Remove the "flashing" class to stop the animation
+    setTimeout(() => {
+        mapDiv?.classList.remove('flashing');
+    }, 5000); // stop after 5 seconds
+}
 onValue(movementDbRef, (snapshot) => {
 
 
@@ -170,11 +217,6 @@ onValue(movementDbRef, (snapshot) => {
         const dotElem = document.createElement('div')
         dotElem.className = 'mymapboxgl-user-location-dot'
         dotElem.classList.add('mapboxgl-user-location-show-heading')
-        // dotElem.style.transform = 'scale("10")'
-        // dotElem.style.backgroundColor = 'yellow'
-        // dotElem.style.width = '27px'
-        // dotElem.style.height = '41px'
-
         const headingElem = document.createElement('div')
         // const dot: HTMLElement | null = document.querySelector('.mapboxgl-user-location-dot')
         // dot ? dot.style.backgroundColor = '#eed202' : null
@@ -183,23 +225,63 @@ onValue(movementDbRef, (snapshot) => {
         const currentLngLat: mapboxgl.LngLatLike = [value.currentPos.longitude, value.currentPos.latitude]
         const otherVehicleMarker = new mapboxgl.Marker(dotElem).setLngLat(currentLngLat).addTo(map)
         currentBikePredictedPath ? otherVehicleMarker.setRotation(value.bearing - currentBikePredictedPath.bearing) : otherVehicleMarker.setRotation(value.bearing)
+
+        const source: mapboxgl.GeoJSONSource = map.getSource(`${value.id}`) as mapboxgl.GeoJSONSource
+        source ?
+            source.setData({
+                'type': 'Feature',
+                'properties': {},
+                'geometry': {
+                    'type': 'LineString',
+                    'coordinates': [[value.currentPos.longitude, value.currentPos.latitude], [value.futurePos.longitude, value.futurePos.latitude]]
+
+                }
+            }) :
+            map.addSource(`${value.id}`, {
+                'type': 'geojson',
+                'data': {
+                    'type': 'Feature',
+                    'properties': {},
+                    'geometry': {
+                        'type': 'LineString',
+                        'coordinates': [[value.currentPos.longitude, value.currentPos.latitude], [value.futurePos.longitude, value.futurePos.latitude]]
+                    }
+                }
+            })
+
+
+        if (!map.getLayer(`${value.id}`)) {
+            map.addLayer({
+                'id': `${value.id}`,
+                'type': 'line',
+                'source': `${value.id}`,
+                'layout': {
+                    'line-join': 'round',
+                    'line-cap': 'round'
+                },
+                'paint': {
+                    'line-color': '#FF5733',
+                    'line-width': 8
+                }
+            })
+        }
+
+
         return otherVehicleMarker
     })
 
 
     //check collision for each of them
-    const dangerousVehicle = filterMovement.filter(val => intersects(currentBikePredictedPath.currentPos, currentBikePredictedPath.futurePos, val.currentPos, val.futurePos))
+    const dangerousVehicle = filterMovement.filter(val => distance(val.currentPos, currentBikePredictedPath.currentPos)).filter(val => intersects(currentBikePredictedPath.currentPos, currentBikePredictedPath.futurePos, val.currentPos, val.futurePos))
     const position = dangerousVehicle.map(val => {
+        flashWarning(getDirection(currentBikePredictedPath, val.currentPos))
         vehicleDOM ? vehicleDOM.innerText = `vehicle at ${getDirection(currentBikePredictedPath, val.currentPos)}` : null
         return {
             direction: getDirection(currentBikePredictedPath, val.currentPos),
             'distance': distance(currentBikePredictedPath.currentPos, val.currentPos)
         }
     })
-    // console.log(position)
-    // filterMovement.map((val:[coordinateFromDB,co])=>{
-    //     filterMovement.filter(p2=> intersects(val[0]['latitude'], val[0]['longitude'],val[1]['latitude'], val[1]['longitude'], p2[0]['latitude'], p2[0]['longitude'],p2[1]['latitude'], p2[1]['longitude']))
-    // } )
+    console.log(position)
 
 })
 
@@ -235,8 +317,6 @@ function intersects(p1: coordinate, p2: coordinate, a1: coordinate, a2: coordina
     }
 };
 
-console.log(`intersect ${intersects({ "latitude": 50.118746544727124, "longitude": 8.638783785656932 }, { "latitude": 50.118732786096054, "longitude": 8.638419005230906 }, { "latitude": 50.119001078688704, "longitude": 8.639025184468272 }, { "latitude": 50.118694949840226, "longitude": 8.639518710927012 })}`)
-
 function distance(p1: coordinate, p2: coordinate) {
     const lat1 = p1.latitude, lat2 = p2.latitude, lon1 = p1.longitude, lon2 = p2.longitude
     const R = 6371e3; // metres
@@ -252,7 +332,6 @@ function distance(p1: coordinate, p2: coordinate) {
 
     return R * c; // in metres
 }
-console.log(distance({ latitude: 50.1189, longitude: 8.63913633995057 }, { latitude: 50.118436033, longitude: 8.64002683 }))
 
 function getDirection(currentPos: currentPredict, otherVehiclePos: coordinate) {
     const lat1 = currentPos.currentPos.latitude, ln1 = currentPos.currentPos.longitude, lat2 = otherVehiclePos.latitude, ln2 = otherVehiclePos.longitude
@@ -260,13 +339,5 @@ function getDirection(currentPos: currentPredict, otherVehiclePos: coordinate) {
         dLon = ln2 - ln1
 
     const bearing = Math.atan2(dLon, dLat) * (180 / Math.PI)
-
-    var coordNames = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "N"];
-    var coordIndex = Math.round(currentPos.bearing - bearing / 45);
-
-    if (coordIndex < 0) {
-        coordIndex = coordIndex + 8
-    };
-    return coordNames[coordIndex]
+    return bearing - currentPos.bearing
 }
-// console.log(getDirection({ "latitude": 50.118869362113756, "longitude": 8.639162559524522 }, { latitude: 50.119379, longitude: 8.63838 }))
