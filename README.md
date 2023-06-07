@@ -10,5 +10,3 @@ To run project
 2. Run it on watch mode\
    npm run watch
 3. View the html in public folder
-
-test

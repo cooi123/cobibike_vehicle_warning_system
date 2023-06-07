@@ -27,6 +27,7 @@ function writeData(path: string, data: any) {
 }
 
 mapboxgl.accessToken = MY_ACCESS_TOKEN
+//initialise the map
 const map = new mapboxgl.Map({
     container: 'map', // container ID
     style: 'mapbox://styles/mapbox/streets-v12', // style URL
@@ -34,7 +35,7 @@ const map = new mapboxgl.Map({
     zoom: 15, // starting zoom
     pitch: 60
 });
-
+//controls the movement and rotation of the map to follow the user
 map.addControl(new mapboxgl.GeolocateControl({
     positionOptions: {
         enableHighAccuracy: true
@@ -94,6 +95,14 @@ const userLocationDotMarker = new mapboxgl.Marker({
     element: dotElem, rotationAlignment: 'map'
 });
 
+
+/**
+ * function that handle changes from the cobi bike data
+ * first adjust the map to the user location
+ * then add a marker to the map to show the user location
+ * uses previous data to predict the next position of the user using mapbox map matching api
+ * add the predicted position to the map and on to the firebase database
+ */
 const valStream = COBI.mobile.location.subscribe((data: COBIMobile) => {
     // writeData(`/bike_data/${id}`, data)
     const currentLngLat: mapboxgl.LngLatLike = [data.coordinate.longitude, data.coordinate.latitude]
@@ -192,6 +201,15 @@ function flashWarning(bearing: number) {
         mapDiv?.classList.remove('flashing');
     }, 5000); // stop after 5 seconds
 }
+/***
+ * function that handle changes from the firebase database
+ * sort the data by time and filter out data that is more than 10 seconds old
+ * then update the location of the bikes to the map
+ * check if the bike is within a certain radius of the user
+ * if it is then flash a warning
+ * 
+ * 
+ */
 onValue(movementDbRef, (snapshot) => {
 
 
@@ -285,6 +303,11 @@ onValue(movementDbRef, (snapshot) => {
 
 })
 
+/**
+ * uses the haversine formula to calculate the distance between two points
+ * uses the current speed and angle to predict the next position of the bike
+ * 
+ */
 function predictNextPos({ coordinate, bearing, speed }: COBIMobile): coordinate {
     //second
     //speed m/s
@@ -301,9 +324,17 @@ function predictNextPos({ coordinate, bearing, speed }: COBIMobile): coordinate 
 
 
 
-
+/**
+ * generate a line for each bike using the current position and the predicted position
+ * uses the intersection of 2 lines to check if the 2 lines intersect
+ * 
+ * @param p1 
+ * @param p2 
+ * @param a1 
+ * @param a2 
+ * @returns 
+ */
 function intersects(p1: coordinate, p2: coordinate, a1: coordinate, a2: coordinate) {
-    //https://stackoverflow.com/questions/9043805/test-if-two-lines-intersect-javascript-function
     const a = p1.latitude, b = p1.longitude, c = p2.latitude, d = p2.longitude, p = a1.latitude, q = a1.longitude, r = a2.latitude, s = a2.longitude
     var det, gamma, lambda;
     det = (c - a) * (s - q) - (r - p) * (d - b);
@@ -317,6 +348,10 @@ function intersects(p1: coordinate, p2: coordinate, a1: coordinate, a2: coordina
     }
 };
 
+/**
+ *  Uses the haversine formula to calculate the distance between two points
+ * 
+ */
 function distance(p1: coordinate, p2: coordinate) {
     const lat1 = p1.latitude, lat2 = p2.latitude, lon1 = p1.longitude, lon2 = p2.longitude
     const R = 6371e3; // metres
@@ -333,6 +368,10 @@ function distance(p1: coordinate, p2: coordinate) {
     return R * c; // in metres
 }
 
+/**
+ * Uses the haversine formula to calculate the bearing between two points
+ * 
+ */
 function getDirection(currentPos: currentPredict, otherVehiclePos: coordinate) {
     const lat1 = currentPos.currentPos.latitude, ln1 = currentPos.currentPos.longitude, lat2 = otherVehiclePos.latitude, ln2 = otherVehiclePos.longitude
     const dLat = lat2 - lat1,
