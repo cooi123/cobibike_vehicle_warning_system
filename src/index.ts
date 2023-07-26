@@ -6,10 +6,9 @@ COBI.init('token');
 import { initializeApp } from 'firebase/app';
 import { getDatabase, push, set, ref, serverTimestamp, onValue, DataSnapshot, get, update } from "firebase/database";
 import mapboxgl, { Marker } from 'mapbox-gl';
-
 const MY_ACCESS_TOKEN = process.env["MAP_BOX_API"] || "undefine"
 const DATABASE_URL = process.env["DATABASE_URL"]
-console.log(DATABASE_URL)
+const GITHUB_TOKEN = process.env["GITHUB_TOKEN"]
 const firebaseConfig = {
     //...
 
@@ -379,4 +378,24 @@ function getDirection(currentPos: currentPredict, otherVehiclePos: coordinate) {
 
     const bearing = Math.atan2(dLon, dLat) * (180 / Math.PI)
     return bearing - currentPos.bearing
+}
+
+const REPO_OWNER = "cooi123";
+const REPO_NAME = "cobibike_simulation";
+
+const simulationButton = document.getElementById('runSimulationBtn')
+simulationButton?.addEventListener('click', runSimulation)
+function runSimulation() {
+
+    fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/dispatches`, {
+        method: 'POST',
+        headers: {
+            'Accept': 'application/vnd.github.v3+json',
+            'Authorization': `token ${GITHUB_TOKEN}`
+        },
+        body: JSON.stringify({
+            "event_type": "run_simulation"
+        })
+    })
+        .then(() => alert("Building and Running simulation"))
 }
