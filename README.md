@@ -1,5 +1,6 @@
 This project is a proof of concept of using gps data to predict the trajectory of the vehicle and warn users of surrounding vehicles.
 More information can be fined on [here](./Research%20Poster.pdf)\
+Cobibike webpage [link](https://cobibike-app.vercel.app/)\
 This project is designed as a module for COBI Bike application, which can be used on bicycles.\
 This project uses map box api and google firebase api.
 Before starting the project, make sure that the api keys are in a .env file.\
